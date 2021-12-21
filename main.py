@@ -1,18 +1,24 @@
 import pandas as pd
 import numpy as np
+import yfinance as yf
 from cvxpy import *
 
-# read monthly_prices.csv
-mp = pd.read_csv("monthly_prices_homework.csv",index_col=0)
+# read monthly prices from yfinance
 mr = pd.DataFrame()
+data = pd.DataFrame()
+tickers = "SPY, AAPL, MSFT, GOOG, AMZN, TSLA, FB, NVDA, JPM, UNH, V, JNJ, HD, WMT, PG, BAC, MA, PFE, DIS, ADBE, ORCL"
+data = yf.download(tickers=tickers, period="2y", interval="1mo")
+data = data['Adj Close']
+data.dropna(subset=["SPY"], inplace=True)
+data = data[:-1]
 
 # compute monthly returns
-for s in mp.columns:
-    date = mp.index[0]
-    pr0 = mp[s][date]
-    for t in range(1, len(mp.index)):
-        date = mp.index[t]
-        pr1 = mp[s][date]
+for s in data.columns:
+    date = data.index[0]
+    pr0 = data[s][date]
+    for t in range(1, len(data.index)):
+        date = data.index[t]
+        pr1 = data[s][date]
         ret = (pr1 - pr0) / pr0
         mr.at[date, s] = ret
         pr0 = pr1
@@ -37,25 +43,33 @@ for j in range(len(symbols)):
 # set up optimization model
 n = len(symbols)
 x = Variable(n)
-req_return = 0.02
+req_return = 0.08
+portfolio_value = 100
 ret = r.T @ x
 risk = quad_form(x, C)
-prob = Problem(Minimize(risk), [sum(x) == 1, ret >= req_return, x >= 0])
 
 # solve problem and write solution
-try:
-    prob.solve()
-    print("----------------------")
-    print("Optimal Portfolio")
-    print("----------------------")
-    for s in range(len(symbols)):
-        print('[%s] = %f' % (symbols[s], x.value[s]))
-    print("----------------------")
-    for s in range(len(symbols)):
-        print('[%s] = $%f' % (symbols[s], x.value[s]*1000))
-    print("----------------------")
-    print('Exp ret = %f' % ret.value)
-    print('risk    = %f' % (risk.value ** 0.5))
-    print("----------------------")
-except:
-    print('Error')
+while True:
+    try:
+        prob = Problem(Minimize(risk), [sum(x) == 1, ret >= req_return, x >= 0])
+        prob.solve()
+        print("----------------------")
+        print("Optimal Portfolio")
+        print("----------------------")
+        for s in range(len(symbols)):
+            print('[%s] = %0.2f' % (symbols[s], x.value[s] * 100) + '%')
+        print("----------------------")
+        for s in range(len(symbols)):
+            print('[%s] = $%0.2f' % (symbols[s], x.value[s] * portfolio_value))
+        print("----------------------")
+        print('Exp ret = %0.2f' % ret.value)
+        print('risk    = %0.3f' % (risk.value ** 0.5))
+        print("----------------------")
+    except:
+        if req_return != 0:
+            req_return = req_return - 0.001
+            continue
+        else:
+            print('Error')
+            break
+    break
